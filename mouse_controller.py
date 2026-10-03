@@ -20,6 +20,10 @@ class MouseController:
         self.positions.clear()
         return self.enabled
 
+    def set_smoothing_window(self, window: int) -> None:
+        """Update the cursor averaging window from validated remote settings."""
+        self.positions = deque(self.positions, maxlen=max(1, min(24, int(window))))
+
     def move_to(self, position: tuple[int, int] | None) -> None:
         if not self.enabled or position is None:
             return

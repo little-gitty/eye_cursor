@@ -133,3 +133,77 @@ py -3.12 -m unittest -v test_blink_detector.py
 ```
 
 A physical webcam is required to verify live landmark tracking and cursor behavior.
+
+## Online Dashboard (Optional)
+
+The dashboard manages accounts, paired Windows devices, connection status, and movement settings. Webcam capture, face tracking, and OS mouse control continue to run locally; video frames are never uploaded.
+
+### Services
+
+- `web/`: React + Vite dashboard, deployed to Vercel
+- `backend/`: FastAPI cloud API, deployable to Render
+- Supabase: account authentication and PostgreSQL storage
+- `cloud_agent.py`: optional local pairing and background settings/status client
+
+### Supabase setup
+
+1. Create a Supabase project.
+2. In the SQL Editor, run `backend/schema.sql`.
+3. Copy the project URL, anon key, and service-role key from Project Settings. Keep the service-role key private; it belongs only in the API host's environment.
+
+### Run the API locally
+
+```powershell
+cd backend
+python -m venv .venv
+.venv\Scripts\activate
+python -m pip install -r requirements.txt
+Copy-Item .env.example .env
+```
+
+Fill `backend/.env` with the Supabase values and set `CORS_ORIGINS=http://localhost:5173`, then start the API:
+
+```powershell
+uvicorn main:app --reload --port 8000
+```
+
+### Run the dashboard locally
+
+In another terminal:
+
+```powershell
+cd web
+npm install
+Copy-Item .env.example .env.local
+```
+
+Set the Supabase URL and anon key in `web/.env.local`, keep `VITE_API_URL=http://localhost:8000`, then run:
+
+```powershell
+npm run dev
+```
+
+Open the URL Vite prints, create an account, and sign in. Supabase email confirmation may need to be enabled or configured for the project.
+
+### Pair a Windows computer
+
+1. Sign in to the dashboard and choose **Pair a computer**.
+2. Copy the displayed command and run it in the project folder using the same Python environment as the controller.
+3. Restart `main.py`. The agent connects in the background; it uploads status and fetches settings, not webcam frames.
+
+The device token is saved under `%APPDATA%\EyeMouse\device.json`. Unpairing deletes the cloud device record, which revokes its token. Local control remains usable if the cloud API is unavailable.
+
+### Deploy
+
+1. Deploy the API using the root `render.yaml` blueprint. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and `CORS_ORIGINS` in Render. Include the production Vercel origin in `CORS_ORIGINS`.
+2. Import the repository into Vercel with the project root set to `web`. Set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_API_URL` (the deployed API base URL), then deploy.
+3. Update the backend `CORS_ORIGINS` with the Vercel production domain and redeploy the API.
+
+Never expose `SUPABASE_SERVICE_ROLE_KEY` in Vercel or any `VITE_*` variable. The service role bypasses database row-level security and is only used by the API server.
+
+### API tests
+
+```powershell
+cd backend
+python -m unittest -v test_api.py
+```

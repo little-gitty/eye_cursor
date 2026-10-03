@@ -12,6 +12,7 @@ import config
 from blink_detector import BlinkDetector
 from calibration import Calibration
 from camera import Camera
+from cloud_agent import CloudAgent
 from face_tracker import FaceTracker
 from head_pose import HeadPoseEstimator
 from mouse_controller import MouseController
@@ -48,6 +49,7 @@ class KeyEdges:
 def run() -> None:
     camera = None
     tracker = None
+    cloud_agent = None
     try:
         camera = Camera(config.CAMERA_INDEX, config.CAMERA_WIDTH, config.CAMERA_HEIGHT, config.CAMERA_FPS)
         tracker = FaceTracker()
@@ -72,12 +74,39 @@ def run() -> None:
             max_wink_ms=config.MAX_WINK_MS,
             simultaneous_window_ms=config.BOTH_EYE_WINDOW_MS,
         )
+        cloud_agent = CloudAgent.from_saved_credentials()
+        if cloud_agent is not None:
+            cloud_agent.start()
+        movement_settings = {
+            "yaw_range_degrees": config.YAW_RANGE_DEGREES,
+            "pitch_range_degrees": config.PITCH_RANGE_DEGREES,
+        }
         keys = KeyEdges()
         last_frame_time = time.perf_counter()
         fps = 0.0
         status_message = "READY"
 
         while True:
+            if cloud_agent is not None:
+                remote_settings = cloud_agent.take_settings()
+                if remote_settings is not None:
+                    try:
+                        movement_settings["yaw_range_degrees"] = max(
+                            5.0,
+                            min(60.0, float(remote_settings["yaw_range_degrees"])),
+                        )
+                        movement_settings["pitch_range_degrees"] = max(
+                            5.0,
+                            min(45.0, float(remote_settings["pitch_range_degrees"])),
+                        )
+                        mouse.set_smoothing_window(int(remote_settings["smoothing_window"]))
+                        pose_estimator.smoothing_alpha = max(
+                            0.05,
+                            min(1.0, float(remote_settings["pose_smoothing_alpha"])),
+                        )
+                    except (KeyError, TypeError, ValueError):
+                        status_message = "Invalid cloud settings ignored"
+
             ok, frame = camera.read()
             if not ok or frame is None:
                 cv2.imshow(config.WINDOW_NAME, error_frame("Camera read failed. Press Q to exit."))
@@ -119,8 +148,8 @@ def run() -> None:
                         pitch,
                         mouse.screen_width,
                         mouse.screen_height,
-                        config.YAW_RANGE_DEGREES,
-                        config.PITCH_RANGE_DEGREES,
+                        movement_settings["yaw_range_degrees"],
+                        movement_settings["pitch_range_degrees"],
                         config.HEAD_YAW_INVERT,
                         config.HEAD_PITCH_INVERT,
                         config.SCREEN_MARGIN,
@@ -144,6 +173,16 @@ def run() -> None:
             if keys.pressed("q"):
                 break
 
+            if cloud_agent is not None:
+                cloud_agent.update_status({
+                    "face_detected": face is not None,
+                    "mouse_enabled": mouse.enabled,
+                    "yaw": yaw,
+                    "pitch": pitch,
+                    "fps": fps,
+                    "message": click_message or status_message,
+                })
+
             info = {
                 "Face": "DETECTED" if face is not None else "NOT DETECTED",
                 "Mouse": "ENABLED" if mouse.enabled else "DISABLED",
@@ -164,6 +203,8 @@ def run() -> None:
         cv2.imshow(config.WINDOW_NAME, error_frame(str(error)))
         cv2.waitKey(2500)
     finally:
+        if cloud_agent is not None:
+            cloud_agent.close()
         if tracker is not None:
             tracker.close()
         if camera is not None:
