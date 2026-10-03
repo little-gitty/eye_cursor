@@ -5,6 +5,21 @@ from __future__ import annotations
 import cv2
 
 
+def available_camera_indices(limit: int = 8) -> list[int]:
+    indices = []
+    for index in range(limit):
+        capture = cv2.VideoCapture(index, cv2.CAP_DSHOW)
+        try:
+            if not capture.isOpened():
+                capture.release()
+                capture = cv2.VideoCapture(index)
+            if capture.isOpened():
+                indices.append(index)
+        finally:
+            capture.release()
+    return indices
+
+
 class Camera:
     def __init__(self, index: int, width: int, height: int, fps: int) -> None:
         self.capture = cv2.VideoCapture(index, cv2.CAP_DSHOW)

@@ -44,11 +44,19 @@ The model is stored in `models/face_landmarker.task` and is resolved relative to
 
 ## Running
 
+Use the launcher to choose a built-in or external camera and start eye cursor locally:
+
 ```powershell
-python main.py
+python launcher.py
 ```
 
-The application opens the webcam and an OpenCV debug window. It does not write calibration to disk; each execution starts uncalibrated.
+The launcher starts the controller without cloud registration or cloud requests. You can also use the default camera directly:
+
+```powershell
+python main.py --local-only
+```
+
+The application opens the selected webcam and an OpenCV debug window. It does not write calibration to disk; each execution starts uncalibrated. Cloud pairing is optional and is only used when explicitly configured and started outside local-only mode.
 
 ## Controls
 

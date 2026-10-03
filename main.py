@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import math
 import time
 
@@ -46,12 +47,12 @@ class KeyEdges:
         return current and not was_pressed
 
 
-def run() -> None:
+def run(camera_index: int = config.CAMERA_INDEX, local_only: bool = False) -> None:
     camera = None
     tracker = None
     cloud_agent = None
     try:
-        camera = Camera(config.CAMERA_INDEX, config.CAMERA_WIDTH, config.CAMERA_HEIGHT, config.CAMERA_FPS)
+        camera = Camera(camera_index, config.CAMERA_WIDTH, config.CAMERA_HEIGHT, config.CAMERA_FPS)
         tracker = FaceTracker()
         pose_estimator = HeadPoseEstimator(
             smoothing_alpha=config.POSE_SMOOTHING_ALPHA,
@@ -74,7 +75,7 @@ def run() -> None:
             max_wink_ms=config.MAX_WINK_MS,
             simultaneous_window_ms=config.BOTH_EYE_WINDOW_MS,
         )
-        cloud_agent = CloudAgent.from_saved_credentials()
+        cloud_agent = None if local_only else CloudAgent.from_saved_credentials()
         if cloud_agent is not None:
             cloud_agent.start()
         movement_settings = {
@@ -212,5 +213,15 @@ def run() -> None:
         cv2.destroyAllWindows()
 
 
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Run the local eye-controlled mouse.")
+    parser.add_argument("--camera-index", type=int, default=config.CAMERA_INDEX)
+    parser.add_argument("--local-only", action="store_true", help="Do not connect to cloud services.")
+    arguments = parser.parse_args()
+    if arguments.camera_index < 0:
+        parser.error("--camera-index must be zero or greater")
+    run(camera_index=arguments.camera_index, local_only=arguments.local_only)
+
+
 if __name__ == "__main__":
-    run()
+    main()

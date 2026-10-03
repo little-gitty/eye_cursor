@@ -12,8 +12,6 @@ const defaultSettings: DeviceSettings = {
   pose_smoothing_alpha: 0.35,
 }
 
-const SELF_DEVICE_STORAGE_KEY = 'eyemouse-self-device'
-
 function App() {
   const [session, setSession] = useState<Session | null>(null)
   const [authReady, setAuthReady] = useState(false)
@@ -52,40 +50,10 @@ function App() {
     return () => data.subscription.unsubscribe()
   }, [])
 
-  async function registerSelfDevice() {
-    if (!token) return null
-    const saved = localStorage.getItem(SELF_DEVICE_STORAGE_KEY)
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as { deviceId?: string; deviceToken?: string }
-        if (parsed.deviceId) {
-          return parsed.deviceId
-        }
-      } catch {
-        localStorage.removeItem(SELF_DEVICE_STORAGE_KEY)
-      }
-    }
-
-    const label = `This laptop (${navigator.userAgent ? navigator.userAgent.split(')')[0].split('(')[1] || 'Laptop' : 'Laptop'})`
-    const created = await apiRequest<{ device_id: string; device_token: string; settings: DeviceSettings }>('/v1/devices/self', token, {
-      method: 'POST',
-      body: JSON.stringify({ label }),
-    })
-    localStorage.setItem(SELF_DEVICE_STORAGE_KEY, JSON.stringify({ deviceId: created.device_id, deviceToken: created.device_token }))
-    return created.device_id
-  }
-
   async function loadDevices(showError = true) {
     if (!token) return
     try {
-      let result = await apiRequest<Device[]>('/v1/devices', token)
-
-      if (result.length === 0) {
-        const selfDeviceId = await registerSelfDevice()
-        if (selfDeviceId) {
-          result = await apiRequest<Device[]>('/v1/devices', token)
-        }
-      }
+      const result = await apiRequest<Device[]>('/v1/devices', token)
 
       setDevices(result)
       setSelectedId((current) => result.some((device) => device.id === current) ? current : result[0]?.id ?? '')
@@ -253,7 +221,7 @@ function App() {
       <main className="main-area">
         <header className="topbar"><div className="breadcrumb">Console <span>/</span> <strong>Overview</strong></div><div className="topbar-right"><div className="secure-label"><ShieldCheck size={15} /> LOCAL PROCESSING</div><button className="icon-button" title="Refresh device status" onClick={() => void loadDevices()}><RefreshCw size={16} /></button></div></header>
         <div className="content-wrap">
-          <section className="page-heading"><div><span className="eyebrow">YOUR CONTROL CENTER</span><h1>Good to see you<span className="heading-period">.</span></h1><p>Keep your computer connected and your controls feeling right.</p></div><button className="button button-primary" onClick={() => void createPairingCode()} disabled={busy}><Plus size={17} /> Register this laptop</button></section>
+          <section className="page-heading"><div><span className="eyebrow">YOUR CONTROL CENTER</span><h1>Good to see you<span className="heading-period">.</span></h1><p>Keep your computer connected and your controls feeling right.</p></div><button className="button button-primary" onClick={() => void createPairingCode()} disabled={busy}><Plus size={17} /> Pair a computer</button></section>
           {(error || notice) && <div className={`toast ${error ? 'toast-error' : 'toast-success'}`} role="status">{error || notice}<button onClick={() => { setError(''); setNotice('') }} aria-label="Dismiss">×</button></div>}
 
           <section className="overview-grid" aria-label="Device summary">
@@ -265,7 +233,7 @@ function App() {
           <section className="device-layout" id="device-section">
             <div className="section-column">
               <div className="section-title"><div><span className="eyebrow">CONNECTED HARDWARE</span><h2>Your computers</h2></div><span className="section-count">{devices.length} DEVICE{devices.length === 1 ? '' : 'S'}</span></div>
-              {devices.length === 0 ? <div className="empty-state"><div className="empty-graphic"><Laptop size={27} /><span>+</span></div><h3>Nothing registered yet</h3><p>Your current laptop will be auto-registered when you first sign in, or you can register it manually here.</p><button className="button button-primary" onClick={() => void createPairingCode()} disabled={busy}><Plus size={16} /> Register this laptop</button></div> : <div className="device-list">{devices.map((device) => {
+              {devices.length === 0 ? <div className="empty-state"><div className="empty-graphic"><Laptop size={27} /><span>+</span></div><h3>No paired computers</h3><p>To start the camera and eye cursor on this computer, run <code>python launcher.py</code> in the project folder. No sign-in or device registration is needed; pairing is only for optional cloud settings.</p><button className="button button-primary" onClick={() => void createPairingCode()} disabled={busy}><Plus size={16} /> Pair a computer</button></div> : <div className="device-list">{devices.map((device) => {
                 const deviceOnline = isOnline(device)
                 return <button className={`device-row ${selectedDevice?.id === device.id ? 'device-selected' : ''}`} key={device.id} onClick={() => setSelectedId(device.id)}><span className={`device-icon ${deviceOnline ? 'device-icon-live' : ''}`}><Laptop size={19} /></span><span className="device-copy"><strong>{device.label}</strong><span>{deviceOnline ? 'Connected now' : device.last_seen_at ? `Last seen ${relativeTime(device.last_seen_at)}` : 'Waiting for first connection'}</span></span><span className={`device-pill ${deviceOnline ? 'pill-online' : ''}`}><i />{deviceOnline ? 'ONLINE' : 'OFFLINE'}</span><ChevronDown className="device-chevron" size={16} /></button>
               })}</div>}
