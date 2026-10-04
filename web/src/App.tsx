@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react'
-import { Activity, ArrowLeftRight, Check, ChevronDown, CircleHelp, Clipboard, Eye, Gauge, Laptop, LogOut, MousePointer2, Plus, RefreshCw, Settings2, ShieldCheck, SlidersHorizontal, Unplug, Wifi, WifiOff } from 'lucide-react'
+import { Activity, ArrowLeftRight, Camera, Check, ChevronDown, CircleHelp, Clipboard, Eye, Gauge, Laptop, LogOut, MousePointer2, Plus, RefreshCw, Settings2, ShieldCheck, SlidersHorizontal, Unplug, Wifi, WifiOff } from 'lucide-react'
 import type { Session } from '@supabase/supabase-js'
 import { apiRequest } from './lib/api'
 import { apiUrl, supabase } from './lib/supabase'
@@ -162,6 +162,12 @@ function App() {
     setNotice('Pairing command copied.')
   }
 
+  async function copyLocalCameraCommand() {
+    const command = '.\\.venv\\Scripts\\python.exe launcher.py'
+    await navigator.clipboard.writeText(command)
+    setNotice('Camera launcher command copied. Run it from the project folder.')
+  }
+
   async function signOut() {
     await supabase?.auth.signOut()
   }
@@ -233,11 +239,11 @@ function App() {
           <section className="device-layout" id="device-section">
             <div className="section-column">
               <div className="section-title"><div><span className="eyebrow">CONNECTED HARDWARE</span><h2>Your computers</h2></div><span className="section-count">{devices.length} DEVICE{devices.length === 1 ? '' : 'S'}</span></div>
-              {devices.length === 0 ? <div className="empty-state"><div className="empty-graphic"><Laptop size={27} /><span>+</span></div><h3>No paired computers</h3><p>To start the camera and eye cursor on this computer, run <code>python launcher.py</code> in the project folder. No sign-in or device registration is needed; pairing is only for optional cloud settings.</p><button className="button button-primary" onClick={() => void createPairingCode()} disabled={busy}><Plus size={16} /> Pair a computer</button></div> : <div className="device-list">{devices.map((device) => {
+              {devices.length === 0 ? <div className="empty-state"><div className="empty-graphic"><Laptop size={27} /><span>+</span></div><h3>No paired computers</h3><p>Choose a built-in or external camera and start eye cursor locally. Sign-in and device registration are not required.</p><button className="copy-command local-launch-command" onClick={() => void copyLocalCameraCommand()}><code>.\.venv\Scripts\python.exe launcher.py</code><Clipboard size={15} /></button><button className="button button-primary" onClick={() => void createPairingCode()} disabled={busy}><Plus size={16} /> Pair a computer</button></div> : <div className="device-list">{devices.map((device) => {
                 const deviceOnline = isOnline(device)
                 return <button className={`device-row ${selectedDevice?.id === device.id ? 'device-selected' : ''}`} key={device.id} onClick={() => setSelectedId(device.id)}><span className={`device-icon ${deviceOnline ? 'device-icon-live' : ''}`}><Laptop size={19} /></span><span className="device-copy"><strong>{device.label}</strong><span>{deviceOnline ? 'Connected now' : device.last_seen_at ? `Last seen ${relativeTime(device.last_seen_at)}` : 'Waiting for first connection'}</span></span><span className={`device-pill ${deviceOnline ? 'pill-online' : ''}`}><i />{deviceOnline ? 'ONLINE' : 'OFFLINE'}</span><ChevronDown className="device-chevron" size={16} /></button>
               })}</div>}
-              {selectedDevice && <div className="telemetry-panel"><div className="telemetry-heading"><div><span className="eyebrow">LIVE TELEMETRY</span><h3>{selectedDevice.label}</h3></div><span className={`connection-tag ${online ? 'connection-live' : ''}`}>{online ? <><Wifi size={13} /> LIVE</> : <><WifiOff size={13} /> OFFLINE</>}</span></div><div className="telemetry-grid"><Telemetry label="YAW" value={online ? formatMetric(status?.yaw) : '—'} unit="deg" /><Telemetry label="PITCH" value={online ? formatMetric(status?.pitch) : '—'} unit="deg" /><Telemetry label="FRAME RATE" value={online ? formatMetric(status?.fps) : '—'} unit="fps" /></div><div className="telemetry-foot"><span>{online ? status?.message || 'Local controller reporting normally' : 'Waiting for local agent heartbeat'}</span><span>{lastRefresh ? `Synced ${lastRefresh.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '—'}</span></div></div>}
+              {selectedDevice && <div className="telemetry-panel"><div className="telemetry-heading"><div><span className="eyebrow">LIVE TELEMETRY</span><h3>{selectedDevice.label}</h3></div><span className={`connection-tag ${online ? 'connection-live' : ''}`}>{online ? <><Wifi size={13} /> LIVE</> : <><WifiOff size={13} /> OFFLINE</>}</span></div><div className="telemetry-grid"><Telemetry label="YAW" value={online ? formatMetric(status?.yaw) : '—'} unit="deg" /><Telemetry label="PITCH" value={online ? formatMetric(status?.pitch) : '—'} unit="deg" /><Telemetry label="FRAME RATE" value={online ? formatMetric(status?.fps) : '—'} unit="fps" /></div><div className="telemetry-foot"><span>{online ? status?.message || 'Local controller reporting normally' : 'Cloud status only; camera can run locally'}</span><span>{lastRefresh ? `Synced ${lastRefresh.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '—'}</span></div>{!online && <div className="local-camera-guide"><div className="local-camera-copy"><Camera size={16} /><span><strong>Choose and start a camera</strong><small>Run the launcher on this PC, select a camera, then start Eye Cursor. Local-only use stays offline here.</small></span></div><button className="copy-command" onClick={() => void copyLocalCameraCommand()}><code>.\\.venv\\Scripts\\python.exe launcher.py</code><Clipboard size={15} /></button></div>}</div>}
             </div>
 
             <div className="settings-column">

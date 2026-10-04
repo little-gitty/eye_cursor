@@ -129,6 +129,11 @@ h1, h2, h3, p { margin-top: 0; }
 .telemetry-stat strong { font: 600 20px var(--display); }
 .telemetry-stat small { margin-left: 4px; color: #97a19b; font: 10px var(--mono); }
 .telemetry-foot { display: flex; justify-content: space-between; gap: 8px; padding-top: 10px; border-top: 1px solid #eef1ed; color: #87928b; font-size: 9px; }
+.local-camera-guide { display: grid; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #eef1ed; }
+.local-camera-copy { display: flex; align-items: flex-start; gap: 9px; color: var(--green); }
+.local-camera-copy span { display: grid; gap: 4px; }
+.local-camera-copy strong { color: var(--ink); font-size: 11px; }
+.local-camera-copy small { color: var(--muted); font-size: 10px; line-height: 1.5; }
 .settings-column { padding-left: 23px; border-left: 1px solid #e1e7e1; }
 .settings-title { align-items: center; }
 .settings-title > svg { margin-top: 12px; color: #8d9991; }
