@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react'
-import { Activity, ArrowLeftRight, Camera, Check, ChevronDown, CircleHelp, Clipboard, Eye, Gauge, Laptop, LogOut, MousePointer2, Plus, RefreshCw, Settings2, ShieldCheck, SlidersHorizontal, Unplug, Wifi, WifiOff } from 'lucide-react'
+import { Activity, ArrowLeftRight, Camera, Check, ChevronDown, CircleHelp, Clipboard, Eye, Gauge, Laptop, LogOut, MousePointer2, RefreshCw, Settings2, ShieldCheck, SlidersHorizontal, Unplug, Wifi, WifiOff } from 'lucide-react'
 import type { Session } from '@supabase/supabase-js'
 import { apiRequest } from './lib/api'
 import { apiUrl, supabase } from './lib/supabase'
@@ -107,21 +107,6 @@ function App() {
     }
   }
 
-  async function createPairingCode() {
-    if (!token) return
-    setBusy(true)
-    setError('')
-    try {
-      const result = await apiRequest<PairingCode>('/v1/pairing-codes', token, { method: 'POST' })
-      setPairingCode(result)
-      setNotice('Pairing code created. It expires in 10 minutes.')
-    } catch (caught) {
-      setError(messageOf(caught))
-    } finally {
-      setBusy(false)
-    }
-  }
-
   async function saveSettings(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!token || !selectedDevice) return
@@ -160,6 +145,20 @@ function App() {
     const command = `python cloud_agent.py pair ${pairingCode.code} --api-url ${apiUrl}`
     await navigator.clipboard.writeText(command)
     setNotice('Pairing command copied.')
+  }
+
+  async function openCamera() {
+    if (!token) return
+    setBusy(true)
+    setError('')
+    try {
+      await apiRequest('/v1/camera/open', token, { method: 'POST' })
+      setNotice('Opening the local camera launcher…')
+    } catch (caught) {
+      setError(messageOf(caught))
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function copyLocalCameraCommand() {
@@ -227,7 +226,7 @@ function App() {
       <main className="main-area">
         <header className="topbar"><div className="breadcrumb">Console <span>/</span> <strong>Overview</strong></div><div className="topbar-right"><div className="secure-label"><ShieldCheck size={15} /> LOCAL PROCESSING</div><button className="icon-button" title="Refresh device status" onClick={() => void loadDevices()}><RefreshCw size={16} /></button></div></header>
         <div className="content-wrap">
-          <section className="page-heading"><div><span className="eyebrow">YOUR CONTROL CENTER</span><h1>Good to see you<span className="heading-period">.</span></h1><p>Keep your computer connected and your controls feeling right.</p></div><button className="button button-primary" onClick={() => void createPairingCode()} disabled={busy}><Plus size={17} /> Pair a computer</button></section>
+          <section className="page-heading"><div><span className="eyebrow">YOUR CONTROL CENTER</span><h1>Good to see you<span className="heading-period">.</span></h1><p>Keep your computer connected and your controls feeling right.</p></div><button className="button button-primary" onClick={() => void openCamera()} disabled={busy}><Camera size={17} /> Open camera</button></section>
           {(error || notice) && <div className={`toast ${error ? 'toast-error' : 'toast-success'}`} role="status">{error || notice}<button onClick={() => { setError(''); setNotice('') }} aria-label="Dismiss">×</button></div>}
 
           <section className="overview-grid" aria-label="Device summary">
@@ -239,7 +238,7 @@ function App() {
           <section className="device-layout" id="device-section">
             <div className="section-column">
               <div className="section-title"><div><span className="eyebrow">CONNECTED HARDWARE</span><h2>Your computers</h2></div><span className="section-count">{devices.length} DEVICE{devices.length === 1 ? '' : 'S'}</span></div>
-              {devices.length === 0 ? <div className="empty-state"><div className="empty-graphic"><Laptop size={27} /><span>+</span></div><h3>No paired computers</h3><p>Choose a built-in or external camera and start eye cursor locally. Sign-in and device registration are not required.</p><button className="copy-command local-launch-command" onClick={() => void copyLocalCameraCommand()}><code>.\.venv\Scripts\python.exe launcher.py</code><Clipboard size={15} /></button><button className="button button-primary" onClick={() => void createPairingCode()} disabled={busy}><Plus size={16} /> Pair a computer</button></div> : <div className="device-list">{devices.map((device) => {
+              {devices.length === 0 ? <div className="empty-state"><div className="empty-graphic"><Laptop size={27} /><span>+</span></div><h3>No paired computers</h3><p>Choose a built-in or external camera and start eye cursor locally. Sign-in and device registration are not required.</p><button className="copy-command local-launch-command" onClick={() => void copyLocalCameraCommand()}><code>.\.venv\Scripts\python.exe launcher.py</code><Clipboard size={15} /></button><button className="button button-primary" onClick={() => void openCamera()} disabled={busy}><Camera size={16} /> Open camera</button></div> : <div className="device-list">{devices.map((device) => {
                 const deviceOnline = isOnline(device)
                 return <button className={`device-row ${selectedDevice?.id === device.id ? 'device-selected' : ''}`} key={device.id} onClick={() => setSelectedId(device.id)}><span className={`device-icon ${deviceOnline ? 'device-icon-live' : ''}`}><Laptop size={19} /></span><span className="device-copy"><strong>{device.label}</strong><span>{deviceOnline ? 'Connected now' : device.last_seen_at ? `Last seen ${relativeTime(device.last_seen_at)}` : 'Waiting for first connection'}</span></span><span className={`device-pill ${deviceOnline ? 'pill-online' : ''}`}><i />{deviceOnline ? 'ONLINE' : 'OFFLINE'}</span><ChevronDown className="device-chevron" size={16} /></button>
               })}</div>}
@@ -257,7 +256,7 @@ function App() {
                 <div className="settings-note"><ShieldCheck size={16} /><span>Mouse enable/disable and wink thresholds stay on the local computer for safety.</span></div>
                 <button className="button button-dark button-wide" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save movement settings'}<span>→</span></button>
                 {online && <button className="text-danger" type="button" onClick={() => void removeDevice()} disabled={busy}><Unplug size={14} /> Unpair this computer</button>}
-              </form> : <div className="settings-empty"><Gauge size={23} /><p>Pair a computer to customize its movement settings.</p></div>}
+              </form> : <div className="settings-empty"><Gauge size={23} /><p>Open a camera to customize its movement settings.</p></div>}
             </div>
           </section>
           <footer className="page-footer"><span>EYEMOUSE CONSOLE <span className="footer-dot">/</span> PRIVATE BY DEFAULT</span><span>Camera frames stay on your computer</span></footer>

@@ -193,21 +193,26 @@ npm run dev
 
 Open the URL Vite prints, create an account, and sign in. Supabase email confirmation may need to be enabled or configured for the project.
 
-### Pair a Windows computer
+### Open the camera from the dashboard
 
-1. Sign in to the dashboard and choose **Pair a computer**.
-2. Copy the displayed command and run it in the project folder using the same Python environment as the controller.
-3. Restart `main.py`. The agent connects in the background; it uploads status and fetches settings, not webcam frames.
+Sign in to the dashboard and choose **Open camera**. The local camera picker and Eye Cursor tracking window open without a command-line window. Choose a connected camera, then select **Start Eye Cursor**. Camera frames are processed locally and are never uploaded.
+
+Cloud pairing is optional. To pair a Windows computer for dashboard status and settings, run `python cloud_agent.py pair <code> --api-url <api-url>` with a valid one-time code and the cloud API URL from the project folder. The agent uploads status and fetches settings, not webcam frames.
 
 The device token is saved under `%APPDATA%\EyeMouse\device.json`. Unpairing deletes the cloud device record, which revokes its token. Local control remains usable if the cloud API is unavailable.
 
 ### Deploy
 
-1. Deploy the API using the root `render.yaml` blueprint. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and `CORS_ORIGINS` in Render. Include the production Vercel origin in `CORS_ORIGINS`.
-2. Import the repository into Vercel with the project root set to `web`. Set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_API_URL` (the deployed API base URL), then deploy.
-3. Update the backend `CORS_ORIGINS` with the Vercel production domain and redeploy the API.
+The cloud dashboard can be deployed on Vercel with the API on Render and Supabase for authentication/database:
+
+1. In Supabase, run `backend/schema.sql`. Under Authentication → URL Configuration, set the Site URL to the Vercel production URL and add the Vercel production and preview URLs to the allowed redirect URLs.
+2. In Render, create a Blueprint instance from the repository's root `render.yaml`. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`. Set `CORS_ORIGINS` to the exact Vercel production origin, including `https://` and no trailing slash (for example, `https://your-project.vercel.app`).
+3. In Vercel, import the repository and set the project Root Directory to `web`. Add `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_API_URL` using the deployed Render API base URL. Vite variables are public and are embedded in the site at build time, so redeploy after changing them.
+4. Redeploy both services after settings are saved. Verify the Render `/health` URL returns `{"status":"ok","service":"eye-mouse-cloud"}`, then sign in to the Vercel site and confirm the device list loads.
 
 Never expose `SUPABASE_SERVICE_ROLE_KEY` in Vercel or any `VITE_*` variable. The service role bypasses database row-level security and is only used by the API server.
+
+**Camera-launch limitation for global hosting:** Render cannot access a visitor's webcam or start a Windows GUI on the visitor's computer. The hosted API explicitly rejects `/v1/camera/open`; camera launch must be done by the local Windows launcher. A globally hosted one-click launch requires a separately installed local companion app/protocol handler, which is not part of the Vercel/Render deployment yet. Webcam frames remain local and must never be sent to the cloud API.
 
 ### API tests
 

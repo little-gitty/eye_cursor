@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tkinter as tk
@@ -73,15 +74,24 @@ class EyeMouseLauncher:
             return
         camera_index = self.camera_indices[selection]
         try:
+            python_executable = Path(sys.executable)
+            if os.name == "nt":
+                pythonw_executable = python_executable.with_name("pythonw.exe")
+                if pythonw_executable.exists():
+                    python_executable = pythonw_executable
+                launch_options = {"creationflags": subprocess.CREATE_NO_WINDOW}
+            else:
+                launch_options = {}
             self.process = subprocess.Popen(
                 [
-                    sys.executable,
+                    str(python_executable),
                     str(PROJECT_ROOT / "main.py"),
                     "--camera-index",
                     str(camera_index),
                     "--local-only",
                 ],
                 cwd=PROJECT_ROOT,
+                **launch_options,
             )
         except OSError as error:
             messagebox.showerror("Could not start Eye Cursor", str(error))
@@ -91,9 +101,15 @@ class EyeMouseLauncher:
 
     def check_process(self) -> None:
         if self.process is not None and self.process.poll() is not None:
+            exit_code = self.process.returncode
             self.process = None
             self.start_button.configure(state="normal" if self.camera_indices else "disabled")
-            self.status.set("Eye Cursor stopped.")
+            if exit_code:
+                message = f"Eye Cursor exited unexpectedly (code {exit_code}). Check camera permissions and model setup."
+                self.status.set(message)
+                messagebox.showerror("Eye Cursor stopped", message)
+            else:
+                self.status.set("Eye Cursor stopped.")
         self.root.after(500, self.check_process)
 
     def close(self) -> None:

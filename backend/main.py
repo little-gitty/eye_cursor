@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 import os
 import secrets
+import subprocess
+import sys
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
@@ -175,6 +177,44 @@ def owned_device(device_id: str, user_id: str) -> dict[str, Any]:
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "eye-mouse-cloud"}
+
+
+@app.post("/v1/camera/open")
+def open_camera() -> dict[str, str]:
+    if os.getenv("RENDER") == "true" or os.getenv("RENDER_EXTERNAL_URL"):
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail=(
+                "A cloud deployment cannot open a camera on your computer. "
+                "Start Eye Mouse using the local Windows launcher."
+            ),
+        )
+
+    project_root = Path(__file__).resolve().parents[1]
+    launcher_path = project_root / "launcher.py"
+    if not launcher_path.exists():
+        raise HTTPException(status_code=500, detail="Camera launcher is missing on this machine.")
+
+    python_executables = (
+        project_root / ".venv" / "Scripts" / "pythonw.exe",
+        Path(sys.executable).with_name("pythonw.exe"),
+    )
+    python_executable = next(
+        (candidate for candidate in python_executables if candidate.exists()),
+        Path(sys.executable),
+    )
+
+    launch_kwargs: dict[str, Any] = {"cwd": str(project_root)}
+    if os.name == "nt":
+        launch_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+    else:
+        launch_kwargs["start_new_session"] = True
+
+    try:
+        subprocess.Popen([str(python_executable), str(launcher_path)], **launch_kwargs)
+    except OSError as error:
+        raise HTTPException(status_code=500, detail=f"Could not start camera launcher: {error}") from error
+    return {"status": "opened", "launcher": str(launcher_path)}
 
 
 @app.post("/v1/pairing-codes", response_model=PairingCodeResponse)

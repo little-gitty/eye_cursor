@@ -18,6 +18,53 @@ class CloudApiTests(unittest.TestCase):
         routes = {route.path for route in app.routes}
         self.assertIn("/v1/devices/self", routes)
 
+    def test_open_camera_endpoint_launches_local_launcher(self):
+        original_popen = main.subprocess.Popen
+        calls = {}
+
+        def fake_popen(cmd, **kwargs):
+            calls["cmd"] = cmd
+            calls["cwd"] = kwargs.get("cwd")
+            calls["creationflags"] = kwargs.get("creationflags")
+            return object()
+
+        main.subprocess.Popen = fake_popen
+        try:
+            response = TestClient(app).post("/v1/camera/open")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["status"], "opened")
+            self.assertIn("launcher.py", calls["cmd"][-1])
+            self.assertEqual(calls["cmd"][-1], str(Path(__file__).resolve().parents[1] / "launcher.py"))
+            if os.name == "nt":
+                self.assertEqual(calls["creationflags"], main.subprocess.CREATE_NO_WINDOW)
+                self.assertNotEqual(calls["creationflags"], main.subprocess.CREATE_NEW_CONSOLE)
+                expected_pythonw = Path(__file__).resolve().parents[1] / ".venv" / "Scripts" / "pythonw.exe"
+                if not expected_pythonw.exists():
+                    expected_pythonw = Path(main.sys.executable).with_name("pythonw.exe")
+                expected_executable = expected_pythonw if expected_pythonw.exists() else Path(main.sys.executable)
+                self.assertEqual(calls["cmd"][0], str(expected_executable))
+        finally:
+            main.subprocess.Popen = original_popen
+
+    def test_open_camera_endpoint_rejects_cloud_deployment(self):
+        original_render = os.environ.get("RENDER")
+        original_render_url = os.environ.get("RENDER_EXTERNAL_URL")
+        os.environ["RENDER"] = "true"
+        os.environ.pop("RENDER_EXTERNAL_URL", None)
+        try:
+            response = TestClient(app).post("/v1/camera/open")
+            self.assertEqual(response.status_code, 501)
+            self.assertIn("cannot open a camera on your computer", response.json()["detail"])
+        finally:
+            if original_render is None:
+                os.environ.pop("RENDER", None)
+            else:
+                os.environ["RENDER"] = original_render
+            if original_render_url is None:
+                os.environ.pop("RENDER_EXTERNAL_URL", None)
+            else:
+                os.environ["RENDER_EXTERNAL_URL"] = original_render_url
+
     def test_schema_sql_includes_required_tables(self):
         schema = Path(__file__).with_name("schema.sql").read_text(encoding="utf-8")
         self.assertIn("create table if not exists public.eye_devices", schema.lower())
