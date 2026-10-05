@@ -2,6 +2,20 @@
 
 A Windows accessibility-oriented mouse controller using a normal webcam, OpenCV, MediaPipe Tasks Face Landmarker, and PyAutoGUI.
 
+## Repository layout
+
+```text
+backend/       FastAPI cloud/local API and database schema
+docs/          React + Vite dashboard
+models/        Local MediaPipe face-landmarker model
+*.py           Local Windows camera, tracking, calibration, and mouse-control app
+render.yaml    Render API deployment blueprint
+requirements.txt
+               Dependencies for the local Windows camera app
+```
+
+The dashboard and API can be deployed independently from the local Windows camera app. The local app owns webcam access, face tracking, and OS mouse control; the API stores accounts, device settings, and status.
+
 ## Features
 
 - 3D `solvePnP` head-pose estimation for cursor direction
@@ -146,10 +160,19 @@ A physical webcam is required to verify live landmark tracking and cursor behavi
 
 The dashboard manages accounts, paired Windows devices, connection status, and movement settings. Webcam capture, face tracking, and OS mouse control continue to run locally; video frames are never uploaded.
 
+### Dashboard features
+
+- Create an account or sign in with email and password through Supabase Authentication.
+- View paired computers, their online/offline state, last-seen time, and current face-tracking and pointer-control status.
+- Inspect live yaw, pitch, and frame-rate telemetry. Device status refreshes automatically every five seconds, and can also be refreshed manually.
+- Select a computer and adjust its horizontal range (8–45°), vertical range (6–35°), smoothing window (1–20 frames), and pose response (10–90%). Save changes to sync them to the local controller; changes are kept in the cloud for the next connection when the device is offline.
+- Keep mouse enable/disable and wink thresholds on the local computer as safety controls. Camera frames remain local and are never uploaded.
+
 ### Services
 
-- `web/`: React + Vite dashboard, deployed to Vercel
+- `docs/`: React + Vite dashboard, deployed to GitHub Pages
 - `backend/`: FastAPI cloud API, deployable to Render
+- Root-level Python modules: local Windows camera and eye-tracking application
 - Supabase: account authentication and PostgreSQL storage
 - `cloud_agent.py`: optional local pairing and background settings/status client
 
@@ -165,11 +188,11 @@ The dashboard manages accounts, paired Windows devices, connection status, and m
 cd backend
 python -m venv .venv
 .venv\Scripts\activate
-python -m pip install -r requirements.txt
+python -m pip install -r requirements.txt -r ..\requirements.txt
 Copy-Item .env.example .env
 ```
 
-Fill `backend/.env` with the Supabase values and set `CORS_ORIGINS=http://localhost:5173`, then start the API:
+Install both requirement files for local development: the backend environment also launches the local camera picker, which needs the root-level OpenCV and MediaPipe dependencies. Fill `backend/.env` with the Supabase values and set `CORS_ORIGINS=http://localhost:5173`, then start the API:
 
 ```powershell
 uvicorn main:app --reload --port 8000
@@ -180,12 +203,12 @@ uvicorn main:app --reload --port 8000
 In another terminal:
 
 ```powershell
-cd web
+cd docs
 npm install
 Copy-Item .env.example .env.local
 ```
 
-Set the Supabase URL and anon key in `web/.env.local`, keep `VITE_API_URL=http://localhost:8000`, then run:
+Set the Supabase URL and anon key in `docs/.env.local`, keep `VITE_API_URL=http://localhost:8000`, then run:
 
 ```powershell
 npm run dev
@@ -195,7 +218,7 @@ Open the URL Vite prints, create an account, and sign in. Supabase email confirm
 
 ### Open the camera from the dashboard
 
-Sign in to the dashboard and choose **Open camera**. The local camera picker and Eye Cursor tracking window open without a command-line window. Choose a connected camera, then select **Start Eye Cursor**. Camera frames are processed locally and are never uploaded.
+With the dashboard and local API running on the same Windows computer, sign in and choose **Open camera**. The local camera picker and Eye Cursor tracking window open without creating additional command-line windows. Choose a connected camera, then select **Start Eye Cursor**. The terminal already running the local API stays open; it hosts the API and is separate from the camera windows. Camera frames are processed locally and are never uploaded.
 
 Cloud pairing is optional. To pair a Windows computer for dashboard status and settings, run `python cloud_agent.py pair <code> --api-url <api-url>` with a valid one-time code and the cloud API URL from the project folder. The agent uploads status and fetches settings, not webcam frames.
 
@@ -203,16 +226,16 @@ The device token is saved under `%APPDATA%\EyeMouse\device.json`. Unpairing dele
 
 ### Deploy
 
-The cloud dashboard can be deployed on Vercel with the API on Render and Supabase for authentication/database:
+The dashboard is built and deployed to GitHub Pages by `.github/workflows/deploy-pages.yml` whenever a commit is pushed to `main`, or manually with **Run workflow** in the repository's Actions tab. The API runs separately on Render, and Supabase provides authentication and PostgreSQL storage. The Pages site URL for this repository is `https://little-gitty.github.io/eye_cursor/`.
 
-1. In Supabase, run `backend/schema.sql`. Under Authentication → URL Configuration, set the Site URL to the Vercel production URL and add the Vercel production and preview URLs to the allowed redirect URLs.
-2. In Render, create a Blueprint instance from the repository's root `render.yaml`. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`. Set `CORS_ORIGINS` to the exact Vercel production origin, including `https://` and no trailing slash (for example, `https://your-project.vercel.app`).
-3. In Vercel, import the repository and set the project Root Directory to `web`. Add `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_API_URL` using the deployed Render API base URL. Vite variables are public and are embedded in the site at build time, so redeploy after changing them.
-4. Redeploy both services after settings are saved. Verify the Render `/health` URL returns `{"status":"ok","service":"eye-mouse-cloud"}`, then sign in to the Vercel site and confirm the device list loads.
+1. In Supabase, run `backend/schema.sql`. Under Authentication → URL Configuration, set the Site URL to `https://little-gitty.github.io/eye_cursor/` and add `https://little-gitty.github.io/eye_cursor/**` to the allowed redirect URLs.
+2. In Render, create a Blueprint instance from the repository's root `render.yaml`. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`. Set `CORS_ORIGINS` to `https://little-gitty.github.io` (the origin only; do not include `/eye_cursor/`).
+3. In GitHub, open the repository's **Settings → Secrets and variables → Actions → Variables** and add `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_API_URL`, with the deployed Render API base URL as `VITE_API_URL`. These frontend values are public and are embedded in the site at build time. Do not put the Supabase service-role key in GitHub Actions variables or any `VITE_*` setting.
+4. In **Settings → Pages**, set the build and deployment source to **GitHub Actions**. Push to `main` or run the workflow manually. Verify the Render `/health` URL returns `{"status":"ok","service":"eye-mouse-cloud"}`, then open the Pages URL and sign in.
 
-Never expose `SUPABASE_SERVICE_ROLE_KEY` in Vercel or any `VITE_*` variable. The service role bypasses database row-level security and is only used by the API server.
+Never expose `SUPABASE_SERVICE_ROLE_KEY` in GitHub Actions variables or any `VITE_*` variable. The service role bypasses database row-level security and is only used by the API server.
 
-**Camera-launch limitation for global hosting:** Render cannot access a visitor's webcam or start a Windows GUI on the visitor's computer. The hosted API explicitly rejects `/v1/camera/open`; camera launch must be done by the local Windows launcher. A globally hosted one-click launch requires a separately installed local companion app/protocol handler, which is not part of the Vercel/Render deployment yet. Webcam frames remain local and must never be sent to the cloud API.
+**Camera-launch limitation for hosted dashboards:** GitHub Pages is a static host and Render cannot access a visitor's webcam or start a Windows GUI on the visitor's computer. The hosted API explicitly rejects `/v1/camera/open`; camera launch must be done by software running locally on the Windows computer, for example `.\.venv\Scripts\python.exe launcher.py` from the project folder. Webcam frames remain local and must never be sent to the cloud API.
 
 ### API tests
 
