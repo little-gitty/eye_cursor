@@ -5,6 +5,6 @@ venv/
 .env
 .env.*
 !.env.example
-docs/node_modules/
-docs/dist/
+web/node_modules/
+web/dist/
 web/.env.local
