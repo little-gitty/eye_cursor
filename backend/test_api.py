@@ -14,6 +14,21 @@ class CloudApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "ok")
 
+    def test_dashboard_preview_origin_passes_cors_preflight(self):
+        response = TestClient(app).options(
+            "/v1/devices",
+            headers={
+                "Origin": "http://localhost:4173",
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "authorization",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.headers["access-control-allow-origin"],
+            "http://localhost:4173",
+        )
+
     def test_route_exposes_self_registration_endpoint(self):
         routes = {route.path for route in app.routes}
         self.assertIn("/v1/devices/self", routes)

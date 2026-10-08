@@ -25,9 +25,12 @@ load_dotenv(Path(__file__).with_name(".env"))
 
 app = FastAPI(title="Eye Mouse Cloud API", version="1.0.0")
 allowed_origins = [
-    origin.strip()
-    for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
-    if origin.strip()
+    origin.strip().rstrip("/")
+    for origin in os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:5173,http://localhost:4173",
+    ).split(",")
+    if origin.strip().rstrip("/")
 ]
 app.add_middleware(
     CORSMiddleware,
