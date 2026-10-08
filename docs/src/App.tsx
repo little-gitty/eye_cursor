@@ -39,21 +39,34 @@ function App() {
       setAuthReady(true)
       return
     }
-    void supabase.auth.getSession().then(({ data }) => {
+    let active = true
+    void supabase.auth.getSession().then(({ data, error: sessionError }) => {
+      if (sessionError) throw sessionError
+      if (!active) return
       setSession(data.session)
+      setAuthReady(true)
+    }).catch((caught: unknown) => {
+      if (!active) return
+      setAuthMessage(messageOf(caught))
       setAuthReady(true)
     })
     const { data } = supabase.auth.onAuthStateChange((_event, value) => {
       setSession(value)
       setAuthReady(true)
     })
-    return () => data.subscription.unsubscribe()
+    return () => {
+      active = false
+      data.subscription.unsubscribe()
+    }
   }, [])
 
   async function loadDevices(showError = true) {
     if (!token) return
     try {
-      const result = await apiRequest<Device[]>('/v1/devices', token)
+      const result = await apiRequest<unknown>('/v1/devices', token)
+      if (!isDeviceList(result)) {
+        throw new Error('The API returned an invalid device list. Check the backend deployment and try again.')
+      }
 
       setDevices(result)
       setSelectedId((current) => result.some((device) => device.id === current) ? current : result[0]?.id ?? '')
@@ -132,7 +145,25 @@ function App() {
     try {
       await apiRequest(`/v1/devices/${selectedDevice.id}`, token, { method: 'DELETE' })
       setNotice(`${selectedDevice.label} was unpaired.`)
-      await loadDevices(false)
+      await loadDevices()
+    } catch (caught) {
+      setError(messageOf(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function createPairingCode() {
+    if (!token) return
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      const result = await apiRequest<unknown>('/v1/pairing-codes', token, { method: 'POST' })
+      if (!isPairingCode(result)) {
+        throw new Error('The API returned an invalid pairing code. Check the backend deployment and try again.')
+      }
+      setPairingCode(result)
     } catch (caught) {
       setError(messageOf(caught))
     } finally {
@@ -143,8 +174,13 @@ function App() {
   async function copyPairCommand() {
     if (!pairingCode) return
     const command = `python cloud_agent.py pair ${pairingCode.code} --api-url ${apiUrl}`
-    await navigator.clipboard.writeText(command)
-    setNotice('Pairing command copied.')
+    try {
+      await navigator.clipboard.writeText(command)
+      setNotice('Pairing command copied.')
+      setError('')
+    } catch (caught) {
+      setError(messageOf(caught))
+    }
   }
 
   async function openCamera() {
@@ -163,8 +199,13 @@ function App() {
 
   async function copyLocalCameraCommand() {
     const command = '.\\.venv\\Scripts\\python.exe launcher.py'
-    await navigator.clipboard.writeText(command)
-    setNotice('Camera launcher command copied. Run it from the project folder.')
+    try {
+      await navigator.clipboard.writeText(command)
+      setNotice('Camera launcher command copied. Run it from the project folder.')
+      setError('')
+    } catch (caught) {
+      setError(messageOf(caught))
+    }
   }
 
   async function signOut() {
@@ -226,7 +267,7 @@ function App() {
       <main className="main-area">
         <header className="topbar"><div className="breadcrumb">Console <span>/</span> <strong>Overview</strong></div><div className="topbar-right"><div className="secure-label"><ShieldCheck size={15} /> LOCAL PROCESSING</div><button className="icon-button" title="Refresh device status" onClick={() => void loadDevices()}><RefreshCw size={16} /></button></div></header>
         <div className="content-wrap">
-          <section className="page-heading"><div><span className="eyebrow">YOUR CONTROL CENTER</span><h1>Good to see you<span className="heading-period">.</span></h1><p>Keep your computer connected and your controls feeling right.</p></div><button className="button button-primary" onClick={() => void openCamera()} disabled={busy}><Camera size={17} /> Open camera</button></section>
+          <section className="page-heading"><div><span className="eyebrow">YOUR CONTROL CENTER</span><h1>Good to see you<span className="heading-period">.</span></h1><p>Keep your computer connected and your controls feeling right.</p></div><div className="page-actions"><button className="button button-dark" onClick={() => void createPairingCode()} disabled={busy}><ArrowLeftRight size={16} /> Pair a computer</button><button className="button button-primary" onClick={() => void openCamera()} disabled={busy}><Camera size={17} /> Open camera</button></div></section>
           {(error || notice) && <div className={`toast ${error ? 'toast-error' : 'toast-success'}`} role="status">{error || notice}<button onClick={() => { setError(''); setNotice('') }} aria-label="Dismiss">×</button></div>}
 
           <section className="overview-grid" aria-label="Device summary">
@@ -255,7 +296,7 @@ function App() {
                 <SettingSlider title="Pose response" description="How quickly tracking follows your movement" value={settings.pose_smoothing_alpha} min={0.1} max={0.9} step={0.05} unit="" display={`${Math.round(settings.pose_smoothing_alpha * 100)}%`} onChange={(value) => setSettings({ ...settings, pose_smoothing_alpha: value })} />
                 <div className="settings-note"><ShieldCheck size={16} /><span>Mouse enable/disable and wink thresholds stay on the local computer for safety.</span></div>
                 <button className="button button-dark button-wide" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save movement settings'}<span>→</span></button>
-                {online && <button className="text-danger" type="button" onClick={() => void removeDevice()} disabled={busy}><Unplug size={14} /> Unpair this computer</button>}
+                <button className="text-danger" type="button" onClick={() => void removeDevice()} disabled={busy}><Unplug size={14} /> Unpair this computer</button>
               </form> : <div className="settings-empty"><Gauge size={23} /><p>Open a camera to customize its movement settings.</p></div>}
             </div>
           </section>
@@ -283,6 +324,32 @@ function SettingSlider({ title, description, value, min, max, step, unit, displa
 
 function isOnline(device: Device): boolean {
   return Boolean(device.last_seen_at && Date.now() - new Date(device.last_seen_at).getTime() < 25_000)
+}
+
+function isDeviceList(value: unknown): value is Device[] {
+  return Array.isArray(value) && value.every((item: unknown) => {
+    if (!isRecord(item) || !isRecord(item.settings) || !isRecord(item.status)) return false
+    return typeof item.id === 'string'
+      && typeof item.label === 'string'
+      && typeof item.settings.yaw_range_degrees === 'number'
+      && typeof item.settings.pitch_range_degrees === 'number'
+      && typeof item.settings.smoothing_window === 'number'
+      && typeof item.settings.pose_smoothing_alpha === 'number'
+      && typeof item.created_at === 'string'
+      && (typeof item.last_seen_at === 'string' || item.last_seen_at === null)
+  })
+}
+
+function isPairingCode(value: unknown): value is PairingCode {
+  return isRecord(value)
+    && typeof value.code === 'string'
+    && value.code.length > 0
+    && typeof value.expires_at === 'string'
+    && Number.isFinite(Date.parse(value.expires_at))
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function relativeTime(value: string): string {

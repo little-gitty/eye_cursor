@@ -35,6 +35,8 @@ class CloudApiTests(unittest.TestCase):
 
     def test_open_camera_endpoint_launches_local_launcher(self):
         original_popen = main.subprocess.Popen
+        original_overrides = app.dependency_overrides.copy()
+        app.dependency_overrides[main.user_id_from_auth] = lambda: "test-user"
         calls = {}
 
         def fake_popen(cmd, **kwargs):
@@ -60,10 +62,18 @@ class CloudApiTests(unittest.TestCase):
                 self.assertEqual(calls["cmd"][0], str(expected_executable))
         finally:
             main.subprocess.Popen = original_popen
+            app.dependency_overrides.clear()
+            app.dependency_overrides.update(original_overrides)
+
+    def test_open_camera_endpoint_requires_authentication(self):
+        response = TestClient(app).post("/v1/camera/open")
+        self.assertEqual(response.status_code, 401)
 
     def test_open_camera_endpoint_rejects_cloud_deployment(self):
         original_render = os.environ.get("RENDER")
         original_render_url = os.environ.get("RENDER_EXTERNAL_URL")
+        original_overrides = app.dependency_overrides.copy()
+        app.dependency_overrides[main.user_id_from_auth] = lambda: "test-user"
         os.environ["RENDER"] = "true"
         os.environ.pop("RENDER_EXTERNAL_URL", None)
         try:
@@ -79,6 +89,8 @@ class CloudApiTests(unittest.TestCase):
                 os.environ.pop("RENDER_EXTERNAL_URL", None)
             else:
                 os.environ["RENDER_EXTERNAL_URL"] = original_render_url
+            app.dependency_overrides.clear()
+            app.dependency_overrides.update(original_overrides)
 
     def test_schema_sql_includes_required_tables(self):
         schema = Path(__file__).with_name("schema.sql").read_text(encoding="utf-8")

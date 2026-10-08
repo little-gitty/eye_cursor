@@ -1,7 +1,7 @@
 import unittest
 
 from calibration import Calibration
-from head_pose import normalize_angle_degrees, unwrap_angle
+from head_pose import HeadPoseEstimator, normalize_angle_degrees, unwrap_angle
 
 
 class CalibrationTests(unittest.TestCase):
@@ -39,6 +39,32 @@ class CalibrationTests(unittest.TestCase):
             screen_margin=8,
         )
         self.assertEqual(position, (8, 8))
+
+    def test_pose_estimator_rejects_single_frame_pose_jump(self):
+        estimator = HeadPoseEstimator(
+            smoothing_alpha=1.0,
+            max_step_degrees=12.0,
+            recovery_frames=3,
+            median_window=1,
+        )
+        self.assertEqual(estimator._stabilize_angles(0.0, 0.0), (0.0, 0.0))
+        self.assertEqual(estimator._stabilize_angles(30.0, 0.0), None)
+        self.assertEqual(estimator.previous_angles, (0.0, 0.0))
+        self.assertEqual(estimator._stabilize_angles(1.0, 0.0), (1.0, 0.0))
+        self.assertFalse(estimator.recovery_history)
+
+    def test_pose_estimator_recovers_after_sustained_pose_jump(self):
+        estimator = HeadPoseEstimator(
+            smoothing_alpha=1.0,
+            max_step_degrees=12.0,
+            recovery_frames=3,
+            median_window=1,
+        )
+        self.assertEqual(estimator._stabilize_angles(0.0, 0.0), (0.0, 0.0))
+        self.assertIsNone(estimator._stabilize_angles(30.0, 0.0))
+        self.assertIsNone(estimator._stabilize_angles(31.0, 0.0))
+        self.assertEqual(estimator._stabilize_angles(32.0, 0.0), (31.0, 0.0))
+        self.assertEqual(estimator._stabilize_angles(33.0, 0.0), (33.0, 0.0))
 
 
 if __name__ == "__main__":

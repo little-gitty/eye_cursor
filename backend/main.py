@@ -183,7 +183,7 @@ def health() -> dict[str, str]:
 
 
 @app.post("/v1/camera/open")
-def open_camera() -> dict[str, str]:
+def open_camera(user_id: str = Depends(user_id_from_auth)) -> dict[str, str]:
     if os.getenv("RENDER") == "true" or os.getenv("RENDER_EXTERNAL_URL"):
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,

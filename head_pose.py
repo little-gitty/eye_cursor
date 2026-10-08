@@ -49,6 +49,8 @@ class HeadPoseEstimator:
         self.previous_rotation_vector: np.ndarray | None = None
         self.previous_translation_vector: np.ndarray | None = None
         self.angle_history: deque[tuple[float, float]] = deque(maxlen=self.median_window)
+        self.recovery_candidate: tuple[float, float] | None = None
+        self.recovery_history: deque[tuple[float, float]] = deque(maxlen=self.recovery_frames)
 
     def estimate(self, face_pixels: np.ndarray, frame_width: int, frame_height: int) -> tuple[float, float] | None:
         image_points = face_pixels[list(POSE_LANDMARKS), :2].astype(np.float64)
@@ -67,6 +69,8 @@ class HeadPoseEstimator:
             flags=cv2.SOLVEPNP_ITERATIVE,
         )
         if not success:
+            self.recovery_candidate = None
+            self.recovery_history.clear()
             return None
         rotation_matrix, _ = cv2.Rodrigues(rotation_vector)
         angles, *_ = cv2.RQDecomp3x3(rotation_matrix)
@@ -76,6 +80,37 @@ class HeadPoseEstimator:
             yaw = unwrap_angle(self.previous_angles[0], yaw)
             pitch = unwrap_angle(self.previous_angles[1], pitch)
 
+        stabilized = self._stabilize_angles(yaw, pitch)
+        if stabilized is None:
+            return self.previous_angles
+        yaw, pitch = stabilized
+
+        self.previous_rotation_vector = rotation_vector.copy()
+        self.previous_translation_vector = translation_vector.copy()
+        return yaw, pitch
+
+    def _stabilize_angles(self, yaw: float, pitch: float) -> tuple[float, float] | None:
+        if self.previous_angles is not None and self.max_step_degrees > 0.0:
+            previous_yaw, previous_pitch = self.previous_angles
+            if (
+                abs(yaw - previous_yaw) > self.max_step_degrees
+                or abs(pitch - previous_pitch) > self.max_step_degrees
+            ):
+                self._track_recovery_candidate(yaw, pitch)
+                if len(self.recovery_history) < self.recovery_frames:
+                    return None
+                yaw = float(np.median([angle[0] for angle in self.recovery_history]))
+                pitch = float(np.median([angle[1] for angle in self.recovery_history]))
+                self.angle_history.clear()
+                self.angle_history.extend(self.recovery_history)
+                self.recovery_candidate = None
+                self.recovery_history.clear()
+                self.previous_angles = (yaw, pitch)
+                return yaw, pitch
+            else:
+                self.recovery_candidate = None
+                self.recovery_history.clear()
+
         self.angle_history.append((yaw, pitch))
         filtered_yaw = float(np.median([angle[0] for angle in self.angle_history]))
         filtered_pitch = float(np.median([angle[1] for angle in self.angle_history]))
@@ -84,28 +119,25 @@ class HeadPoseEstimator:
             previous_yaw, previous_pitch = self.previous_angles
             yaw_delta = filtered_yaw - previous_yaw
             pitch_delta = filtered_pitch - previous_pitch
-            if self.max_step_degrees > 0.0:
-                yaw_delta = float(np.clip(
-                    yaw_delta,
-                    -self.max_step_degrees,
-                    self.max_step_degrees,
-                ))
-                pitch_delta = float(np.clip(
-                    pitch_delta,
-                    -self.max_step_degrees,
-                    self.max_step_degrees,
-                ))
             alpha = self.smoothing_alpha
             yaw = previous_yaw + alpha * yaw_delta
             pitch = previous_pitch + alpha * pitch_delta
         else:
-            yaw = filtered_yaw
-            pitch = filtered_pitch
+            yaw, pitch = filtered_yaw, filtered_pitch
 
         self.previous_angles = (yaw, pitch)
-        self.previous_rotation_vector = rotation_vector.copy()
-        self.previous_translation_vector = translation_vector.copy()
         return yaw, pitch
+
+    def _track_recovery_candidate(self, yaw: float, pitch: float) -> None:
+        candidate = (yaw, pitch)
+        previous_candidate = self.recovery_candidate
+        if previous_candidate is None or (
+            abs(yaw - previous_candidate[0]) > self.max_step_degrees
+            or abs(pitch - previous_candidate[1]) > self.max_step_degrees
+        ):
+            self.recovery_history.clear()
+        self.recovery_history.append(candidate)
+        self.recovery_candidate = candidate
 
     def reset(self) -> None:
         """Clear temporal pose state after a tracking interruption."""
@@ -113,3 +145,5 @@ class HeadPoseEstimator:
         self.previous_rotation_vector = None
         self.previous_translation_vector = None
         self.angle_history.clear()
+        self.recovery_candidate = None
+        self.recovery_history.clear()

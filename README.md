@@ -110,8 +110,8 @@ The main tuning values are centralized in `config.py`:
 
 - `SMOOTHING_WINDOW`: cursor stability versus responsiveness
 - `POSE_SMOOTHING_ALPHA`: per-frame head-pose responsiveness; lower values reduce jitter
-- `MAX_POSE_STEP_DEGREES`: maximum accepted one-frame pose change; larger jumps are treated as bad landmark/PnP results
-- `POSE_RECOVERY_FRAMES`: consecutive rejected pose frames before accepting a sustained new pose and recovering from a solver branch
+- `MAX_POSE_STEP_DEGREES`: largest accepted per-frame yaw or pitch change; larger changes are held as possible landmark/PnP outliers
+- `POSE_RECOVERY_FRAMES`: consecutive, stable outlier frames required before accepting a sustained new pose and recovering from a solver branch
 - `YAW_RANGE_DEGREES` and `PITCH_RANGE_DEGREES`: head movement needed to reach screen edges
 - `BLINK_THRESHOLD`: EAR value below which an eye is considered closed
 - `BLINK_THRESHOLD_RATIO`: fraction of each calibrated open-eye EAR used as the closed-eye threshold
@@ -220,7 +220,7 @@ Open the URL Vite prints, create an account, and sign in. Supabase email confirm
 
 With the dashboard and local API running on the same Windows computer, sign in and choose **Open camera**. The local camera picker and Eye Cursor tracking window open without creating additional command-line windows. Choose a connected camera, then select **Start Eye Cursor**. The terminal already running the local API stays open; it hosts the API and is separate from the camera windows. Camera frames are processed locally and are never uploaded.
 
-Cloud pairing is optional. To pair a Windows computer for dashboard status and settings, run `python cloud_agent.py pair <code> --api-url <api-url>` with a valid one-time code and the cloud API URL from the project folder. The agent uploads status and fetches settings, not webcam frames.
+Cloud pairing is optional. In the dashboard, choose **Pair a computer** to generate a one-time code, then run `python cloud_agent.py pair <code> --api-url <api-url>` with that code and the cloud API URL from the project folder. The agent uploads status and fetches settings, not webcam frames.
 
 The device token is saved under `%APPDATA%\EyeMouse\device.json`. Unpairing deletes the cloud device record, which revokes its token. Local control remains usable if the cloud API is unavailable.
 
