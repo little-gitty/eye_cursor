@@ -8,3 +8,5 @@ venv/
 web/node_modules/
 web/dist/
 web/.env.local
+docs/node_modules/
+docs/dist/

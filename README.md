@@ -170,7 +170,7 @@ The dashboard manages accounts, paired Windows devices, connection status, and m
 
 ### Services
 
-- `docs/`: React + Vite dashboard, deployed to GitHub Pages
+- `docs/`: React + Vite dashboard, deployed to Vercel
 - `backend/`: FastAPI cloud API, deployable to Render
 - Root-level Python modules: local Windows camera and eye-tracking application
 - Supabase: account authentication and PostgreSQL storage
@@ -226,16 +226,16 @@ The device token is saved under `%APPDATA%\EyeMouse\device.json`. Unpairing dele
 
 ### Deploy
 
-The dashboard is built and deployed to GitHub Pages by `.github/workflows/deploy-pages.yml` whenever a commit is pushed to `main`, or manually with **Run workflow** in the repository's Actions tab. The API runs separately on Render, and Supabase provides authentication and PostgreSQL storage. The Pages site URL for this repository is `https://little-gitty.github.io/eye_cursor/`.
+The cloud dashboard can be deployed on Vercel with the API on Render and Supabase for authentication/database:
 
-1. In Supabase, run `backend/schema.sql`. Under Authentication → URL Configuration, set the Site URL to `https://little-gitty.github.io/eye_cursor/` and add `https://little-gitty.github.io/eye_cursor/**` to the allowed redirect URLs.
-2. In Render, create a Blueprint instance from the repository's root `render.yaml`. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`. Set `CORS_ORIGINS` to `https://little-gitty.github.io` (the origin only; do not include `/eye_cursor/`).
-3. In GitHub, open the repository's **Settings → Secrets and variables → Actions → Variables** and add `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_API_URL`, with the deployed Render API base URL as `VITE_API_URL`. These frontend values are public and are embedded in the site at build time. Do not put the Supabase service-role key in GitHub Actions variables or any `VITE_*` setting.
-4. In **Settings → Pages**, set the build and deployment source to **GitHub Actions**. Push to `main` or run the workflow manually. Verify the Render `/health` URL returns `{"status":"ok","service":"eye-mouse-cloud"}`, then open the Pages URL and sign in.
+1. In Supabase, run `backend/schema.sql`. Under Authentication → URL Configuration, set the Site URL to the Vercel production URL and add the Vercel production and preview URLs to the allowed redirect URLs.
+2. In Render, create a Blueprint instance from the repository's root `render.yaml`. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`. Set `CORS_ORIGINS` to the exact Vercel production origin, including `https://` and no trailing slash (for example, `https://your-project.vercel.app`).
+3. In Vercel, import the repository and set the project Root Directory to `docs`. Add `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_API_URL` using the deployed Render API base URL. Vite variables are public and are embedded in the site at build time, so redeploy after changing them.
+4. Redeploy both services after settings are saved. Verify the Render `/health` URL returns `{"status":"ok","service":"eye-mouse-cloud"}`, then sign in to the Vercel site and confirm the device list loads.
 
-Never expose `SUPABASE_SERVICE_ROLE_KEY` in GitHub Actions variables or any `VITE_*` variable. The service role bypasses database row-level security and is only used by the API server.
+Never expose `SUPABASE_SERVICE_ROLE_KEY` in Vercel or any `VITE_*` variable. The service role bypasses database row-level security and is only used by the API server.
 
-**Camera-launch limitation for hosted dashboards:** GitHub Pages is a static host and Render cannot access a visitor's webcam or start a Windows GUI on the visitor's computer. The hosted API explicitly rejects `/v1/camera/open`; camera launch must be done by software running locally on the Windows computer, for example `.\.venv\Scripts\python.exe launcher.py` from the project folder. Webcam frames remain local and must never be sent to the cloud API.
+**Camera-launch limitation for global hosting:** Render cannot access a visitor's webcam or start a Windows GUI on the visitor's computer. The hosted API explicitly rejects `/v1/camera/open`; camera launch must be done by software running locally on the Windows computer. A globally hosted one-click launch requires a separately installed local companion app/protocol handler, which is not part of the Vercel/Render deployment yet. Webcam frames remain local and must never be sent to the cloud API.
 
 ### API tests
 
